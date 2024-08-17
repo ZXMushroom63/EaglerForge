@@ -23,7 +23,12 @@
             var file = document.querySelector("input").files[0];
             var fileType = file.name.split(".");
             fileType = fileType[fileType.length - 1];
+            
             file.text().then(string => {
+                var patchedFile = string;
+                patchedFile.replace(/function \$rt_metadata\(data\)( ?){/gm, 
+                    `function $rt_metadata(data) {/*/EaglerForge Client Patch/*/window.ModAPI ||= {}; ModAPI.reflect ||= {}; ModAPI.reflect._rippedData ||= []; if (ModAPI.reflect.__patchRippedData) {ModAPI.reflect.__patchRippedData(data)}; ModAPI.reflect._rippedData.push(data);/*/EaglerForge Client Patch/*/`
+                );
                 var blob = new Blob([string], {type: file.type});
                 saveAs(blob, "processed."+fileType);
             });
