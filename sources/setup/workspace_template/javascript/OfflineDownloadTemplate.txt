@@ -37,7 +37,7 @@ Compile it yourself here: https://gitlab.com/lax1dude/eaglercraftx-1.8/
 <meta property="og:description" content="this file is not a website, whoever uploaded it to this URL is a dumbass" />
 <script type="text/javascript">
 function initAPI(version) {
-  var ModAPI = {};
+  var ModAPI = globalThis.ModAPI || {};
   ModAPI.events = {};
   ModAPI.events.types = ["event"];
   ModAPI.events.listeners = { "event": [] };

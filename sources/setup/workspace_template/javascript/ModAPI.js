@@ -1,5 +1,5 @@
 function initAPI(version) {
-  var ModAPI = {};
+  var ModAPI = globalThis.ModAPI || {};
   ModAPI.events = {};
   ModAPI.events.types = ["event"];
   ModAPI.events.listeners = { "event": [] };
