@@ -26,10 +26,52 @@
             
             file.text().then(string => {
                 var patchedFile = string;
-                patchedFile.replace(/function \$rt_metadata\(data\)( ?){/gm, 
-                    `function $rt_metadata(data) {/*/EaglerForge Client Patch/*/window.ModAPI ||= {}; ModAPI.reflect ||= {}; ModAPI.reflect._rippedData ||= []; if (ModAPI.reflect.__patchRippedData) {ModAPI.reflect.__patchRippedData(data)}; ModAPI.reflect._rippedData.push(data);/*/EaglerForge Client Patch/*/`
+                // patchedFile.replace(/function \$rt_metadata\(data\)( ?){/gm, 
+                //     `function $rt_metadata(data) {/*/EaglerForge Client Patch/*/window.ModAPI ||= {}; ModAPI.reflect ||= {}; ModAPI.reflect._rippedData ||= []; if (ModAPI.reflect.__patchRippedData) {ModAPI.reflect.__patchRippedData(data)}; ModAPI.reflect._rippedData.push(data);/*/EaglerForge Client Patch/*/`
+                // );
+                // patchedFile.replaceAll(/(?<=function \$rt_wrapFunction.*?\(f\)(?: ?){[\s\S]*?return function\([\s\S]*?\).*?{[\s\S]*?)(return f)/gm, function match() {
+                //    return `return ModAPI.hooks._functionMap.get(f.name)`
+                // });
+                // patchedFile.replaceAll(/function \$rt_wrapFunction.*?\(f\)( ?){/gm, function (match) {
+                //     return match + 
+                //     `
+                //     /*/EaglerForge Client Patch/*/
+                //     window.ModAPI ||= {};
+                //     ModAPI.hooks ||= {};
+                //     ModAPI.hooks._functionMap ||= new Map();
+                //     ModAPI.hooks._functionNames ||= [];
+                //     ModAPI.hooks._functionNames.push(f.name);
+                //     if (ModAPI.hooks._functionMap.has(f.name)) {
+                //         console.log(f.name + " was indexed more than once, and is likely duplicated.");
+                //     }
+                //     ModAPI.hooks._functionMap.set(f.name, f);
+                //     /*/EaglerForge Client Patch/*/
+                //     `;
+                // });
+                patchedFile = patchedFile.replace(/function \$rt_metadata\(data\)( ?){/gm, 
+                    `function $rt_metadata(data) {/*/EaglerForge Client Patch/*/globalThis.ModAPI ||= {}; ModAPI.reflect ||= {}; ModAPI.reflect._rippedData ||= []; if (ModAPI.reflect.__patchRippedData) {ModAPI.reflect.__patchRippedData(data)}; ModAPI.reflect._rippedData.push(data);/*/EaglerForge Client Patch/*/`
                 );
-                var blob = new Blob([string], {type: file.type});
+                const wrapFunctionRegex = /function \$rt_wrapFunction.*?\(f\)(?: ?){[\s\S]*?return function\([\s\S]*?\).*?{[\s\S]*?return f/gm;
+                patchedFile = patchedFile.replaceAll(wrapFunctionRegex, (match) => {
+                    return match.replace(/return f(?!unction)/m, "return ModAPI.hooks._functionMap.get(f.name)");
+                });
+                const wrapFunctionStartRegex = /function \$rt_wrapFunction.*?\(f\)( ?){/gm;
+                patchedFile = patchedFile.replaceAll(wrapFunctionStartRegex, (match) => {
+                    return match + `
+                    /*/EaglerForge Client Patch/*/
+                    globalThis.ModAPI ||= {};
+                    ModAPI.hooks ||= {};
+                    ModAPI.hooks._functionMap ||= new Map();
+                    ModAPI.hooks._functionNames ||= [];
+                    ModAPI.hooks._functionNames.push(f.name);
+                    if (ModAPI.hooks._functionMap.has(f.name)) {
+                        console.log(f.name + " was indexed more than once, and is likely duplicated.");
+                    }
+                    ModAPI.hooks._functionMap.set(f.name, f);
+                    /*/EaglerForge Client Patch/*/
+                    `;
+                });
+                var blob = new Blob([patchedFile], {type: file.type});
                 saveAs(blob, "processed."+fileType);
             });
         });
