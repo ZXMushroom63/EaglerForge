@@ -26,32 +26,95 @@
             
             file.text().then(string => {
                 var patchedFile = string;
+                patchedFile = patchedFile.replace(`(function(root, module) {`, `globalThis.ModAPI ||= {};
+ModAPI.hooks ||= {};
+ModAPI.hooks._rippedData ||= [];
+ModAPI.hooks._rippedConstructors ||= {};
+ModAPI.hooks._rippedMethods ||= {};
+ModAPI.hooks._rippedMethodTypeMap ||= {};
+(function(root, module) {`);
                 patchedFile = patchedFile.replace(/function \$rt_metadata\(data\)( ?){/gm, 
-                    `function $rt_metadata(data) {/*/EaglerForge Client Patch/*/globalThis.ModAPI ||= {}; ModAPI.reflect ||= {}; ModAPI.reflect._rippedData ||= []; if (ModAPI.reflect.__patchRippedData) {ModAPI.reflect.__patchRippedData(data)}; ModAPI.reflect._rippedData.push(data);/*/EaglerForge Client Patch/*/`
+                    `function $rt_metadata(data) {
+                    /*/EaglerForge Client Patch/*/
+                    if (ModAPI.hooks.__patchRippedData)
+                    {
+                        ModAPI.hooks.__patchRippedData(data)
+                    };
+                    ModAPI.hooks._rippedData.push(data);
+                    /*/EaglerForge Client Patch/*/`
                 );
-                const wrapFunctionRegex = /function \$rt_wrapFunction.*?\(f\)(?: ?){[\s\S]*?return function\([\s\S]*?\).*?{[\s\S]*?return f/gm;
-                patchedFile = patchedFile.replaceAll(wrapFunctionRegex, (match) => {
-                    return match.replace(/return f(?!unction)/m, "return ModAPI.hooks._functionMap[f.name]");
+                const extractConstructorRegex = /^\s*function (\S*?)__init_\d+?\((?!\$)/gm;
+                const extractConstructorFullNameRegex = /function (\S*?)__init_[0-9]+/gm;
+                patchedFile = patchedFile.replaceAll(extractConstructorRegex, (match) => {
+                    var fullName = match.match(extractConstructorFullNameRegex);
+                    fullName = fullName[0].replace("function ", "");
+                    return `ModAPI.hooks._rippedConstructors[\`${fullName}\`] = ${fullName};
+    ` + match;
                 });
-                const wrapFunctionStartRegex = /function \$rt_wrapFunction.*?\(f\)( ?){/gm;
-                patchedFile = patchedFile.replaceAll(wrapFunctionStartRegex, (match) => {
-                    return match + `
-                    /*/EaglerForge Client Patch/*/
-                    globalThis.ModAPI ||= {};
-                    ModAPI.hooks ||= {};
-                    ModAPI.hooks._functionMap ||= {};
-                    ModAPI.hooks._functionNames ||= [];
-                    ModAPI.hooks._functionNames.push(f.name);
-                    if (ModAPI.hooks._functionMap[f.name]) {
-                        console.log(f.name + " was indexed more than once, and is likely duplicated.");
+                const extractInstanceMethodRegex = /^[\t ]*function \S+?_\S+?_\S+?\(/gm; // /^[\t ]*function \S+?_\S+?_\S+?\(\$this/gm
+                const extractInstanceMethodFullNameRegex = /function (\S*?)\(/gm; // /function (\S*?)\(\$this/gm
+                patchedFile = patchedFile.replaceAll(extractInstanceMethodRegex, (match) => {
+                    if (match.includes("__init_") || match.includes("__clinit_") || match.includes("_$callClinit")) {
+                        return match;
                     }
-                    ModAPI.hooks._functionMap[f.name] = f;
-                    /*/EaglerForge Client Patch/*/
-                    `;
+                    var fullName = match.match(extractInstanceMethodFullNameRegex);
+                    fullName = fullName[0].replace("function ", "").replace("(", "");
+                    return `function ${fullName}(...args) {
+                        return ModAPI.hooks._rippedMethods[\`${fullName}\`].apply(this, args);
+                    }
+                    ModAPI.hooks._rippedMethodTypeMap[\`${fullName}\`] = \`${match.includes("function "+fullName+"($this") ? "instance" : "static"}\`;
+                    ModAPI.hooks._rippedMethods[\`${fullName}\`]=`+match.replace(fullName + "(", "(");
+                    return match;
                 });
                 var blob = new Blob([patchedFile], {type: file.type});
                 saveAs(blob, "processed."+fileType);
             });
+        });
+    </script>
+    <script>
+        (()=>{
+
+
+            ModAPI.hooks._classMap = {};
+            ModAPI.hooks._rippedConstructorKeys = Object.keys(ModAPI.hooks._rippedConstructors);
+            ModAPI.hooks._rippedData.forEach(block => {block.forEach(item=>{
+                if (typeof item === "function") {
+                    var compiledName = item.name;
+                    if (!item.$meta || typeof item.$meta.name !== "string") {
+                        return;
+                    }
+                    var classId = item.$meta.name;
+                    if (!ModAPI.hooks._classMap[classId]) {
+                        ModAPI.hooks._classMap[classId] = {
+                            "name": classId.split(".")[classId.split(".").length - 1],
+                            "id": classId,
+                            "binaryName": item.$meta.binaryName,
+                            "constructors": [],
+                            "methods": [],
+                            "staticMethods": [],
+                            "class": item,
+                            "compiledName": compiledName
+                        }
+                    }
+                    if (typeof item.$meta.superclass === "function" && item.$meta.superclass.$meta) {
+                        ModAPI.hooks._classMap[classId].superclass = item.$meta.superclass.$meta.name;
+                    }
+                    if (item["$$constructor$$"]) {
+                        //Class does not have any hand written constructors
+                        //Eg: class MyClass {}
+                        ModAPI.hooks._classMap[classId].constructors.push(item["$$constructor$$"]);
+                    } else {
+                        //Class has hand written constructors, we need to search in the stash
+                        ModAPI.hooks._rippedConstructorKeys.forEach(constructor => {
+                            if (constructor.startsWith(compiledName) && !constructor.includes("$lambda$")) {
+                                ModAPI.hooks._classMap[classId].constructors.push(ModAPI.hooks._rippedConstructors[constructor]);
+                            }
+                        });
+                    }
+                }
+            })});
+
+
         });
     </script>
 </body>
